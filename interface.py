@@ -75,12 +75,12 @@ def output_all_contacts() -> None:
     if os.path.exists(os.path.abspath(os.path.join('database', 'people.db'))):
         try:
             with models.db:
-                contacts = sorted(models.Contact.select(), key=lambda x: x.name[0])
+                contacts = models.Contact.select().order_by(models.Contact.name)
                 for id_contact, contact in enumerate(contacts, start=1):
                     print("{id})  Имя: {name}\n\tФамилия: {sec_name}\n\t"
                           "Отчество: {patronymic}\n\tОрганизация: "
                           "{company}\n\tРаб.тел.: {work_phone}\n\tЛичный телефон: {phone}".format(
-                        id=contact.id,
+                        id=id_contact,
                         name=contact.name,
                         sec_name=contact.sec_name,
                         patronymic=contact.patronymic,
@@ -102,8 +102,21 @@ def output_contacts_by_page_number() -> None:
 
 
 @logger.catch
-def find() -> None:
-    pass
+def find_contact() -> None:
+    name = input('Введите имя контакта: ')
+    try:
+        found_contact = models.Contact.select().where(peewee.fn.Lower(models.Contact.name) == name) #если здесь добавить .lower - то вообще ничего не находит. А так находит  только если так же имя указать как в бд
+        if found_contact:
+            for contact in found_contact:
+                print(contact.name, contact.personal_phone)
+        else:
+            print('Контакт не найден')
+    except Exception as error:
+        logger.error(f'interface.find_contact - Ошибка: {error}')
+        print('Произошла ошибка при поиске контакта')
+
+
+
 
 
 @logger.catch
@@ -141,6 +154,15 @@ def add_contact() -> None:
         )
     print('Контакт добавлен!')
 
+@logger.catch
+def editing() -> None:
+    pass
+
+
+@logger.catch
+def delete_contact() -> None:
+    pass
+
 
 @logger.catch
 def main() -> None:
@@ -154,7 +176,7 @@ def main() -> None:
         elif num_action == '2':
             pass
         elif num_action == '3':
-            pass
+            find_contact()
         elif num_action == '4':
             add_contact()
         elif num_action == '5':

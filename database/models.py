@@ -1,7 +1,7 @@
 from peewee import *
 import os
 
-db = SqliteDatabase(os.path.join('database', 'people.db'))
+db = SqliteDatabase(os.path.abspath(os.path.join('database', 'people.db')))
 
 
 class BaseModel(Model):
@@ -9,7 +9,7 @@ class BaseModel(Model):
 
     class Meta:
         database = db
-        order_by = 'name'
+        order_by = 'id'
 
 
 class Contact(BaseModel):
@@ -22,3 +22,4 @@ class Contact(BaseModel):
 
     class Meta:
         db_table = 'contacts'
+        order_by = 'name'
