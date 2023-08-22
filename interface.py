@@ -1,14 +1,22 @@
 from loguru import logger
 import datetime
-from database import models
+from database.models import Contact, db
 import os
 import peewee
 
-commands = ['Вывод всех контактов', 'Вывод контактов по номеру страницы', 'Поиск', 'Добавить контакт',
-            'Изменить контакт', 'Удалить контакт', 'Остановить приложение']
+commands = ['Вывод контактов по номеру страницы', 'Добавить контакт', 'Изменить контакт', 'Поиск контакта']
 logger.add(f'logs/debug.{datetime.datetime.now().date()}.log',
            format="{time} {level} {message}",
            level='DEBUG', rotation='10 MB', compression='zip')
+
+
+def clear() -> None:
+    """
+    Функция очистки консоли
+    :return: None
+    """
+    logger.info(f'interface.clear - os.system: {os.system}')
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 
 @logger.catch
@@ -20,73 +28,54 @@ def greetings() -> str:
     global commands
     for i, i_command in enumerate(commands, start=1):
         print(f"{i} - {i_command}")
-    while True:
-        action = input('Выберите действие: ')
-        if is_valid('greetings', action):
-            return action
+    action = input('Выберите действие: ')
+    return action
 
 
 @logger.catch
-def is_valid(flag: str, number: str) -> bool:
+def is_valid(number: str) -> bool:
     """
-    Функция проверяет данные вводимые пользователем
+    Функция проверяет номер телефона вводимые пользователем
     :param number: номер который будем проверять
-    :param flag: для какой функции(greetings, add_contact)
-    :return:
-        greetings
-            True - если введено число в диапазоне длины списка команд;
-            False - в противном случае
-        add_contact
-            True - если номер телефона состоит только из цифр, и если их кол-во равно 11
-            False - в противном случае"""
-    logger.info(f"interface.is_valid - flag: {flag}, number: {number}")
-    global commands
-    if flag == 'greetings':
-        try:
-            if int(number) not in range(1, len(commands) + 1):
-                raise IndexError('Number out of range')
-            return True
-        except ValueError as error:
-            logger.error(f'interface.greetings - Ошибка: {error}')
-            print('Значение должно быть числом. Попробуйте снова!')
-            return False
-        except IndexError as error:
-            logger.error(f'interface.greetings - Ошибка: {error}')
-            print(f'Значение должно быть в диапазоне от 1 до {len(commands)}. Попробуйте снова!')
-            return False
-    else:
-        if not number.isdigit() and number:
-            print('Телефон должен содержать только цифры!')
-            return False
-        elif len(number) != 11 and number:
-            print('Количество цифр в номере должно быть равным 11')
-            return False
-        else:
-            return True
+    :return: True или False
+    """
+    logger.info(f"interface.is_valid - number: {number}")
+    if number.startswith('+7'):
+        number = number[1:]
+    try:
+        number = int(number)
+        return True
+    except ValueError as error:
+        logger.error(f'interface.greetings - Ошибка: {error}')
+        return False
 
 
 @logger.catch
-def output_all_contacts() -> None:
+def output_all_contacts(num_page: int) -> None:
     """
     Выводит в консоль список контактов в алфавитном порядке. Если их нет - то сообщает об этом.
+    :param: num_page: int - номер страницы
     :return: None
     """
     logger.info(f"interface.output_all_contacts")
     if os.path.exists(os.path.abspath(os.path.join('database', 'people.db'))):
         try:
-            with models.db:
-                contacts = models.Contact.select().order_by(models.Contact.name)
-                for id_contact, contact in enumerate(contacts, start=1):
-                    print("{id})  Имя: {name}\n\tФамилия: {sec_name}\n\t"
-                          "Отчество: {patronymic}\n\tОрганизация: "
-                          "{company}\n\tРаб.тел.: {work_phone}\n\tЛичный телефон: {phone}".format(
-                        id=id_contact,
-                        name=contact.name,
-                        sec_name=contact.sec_name,
-                        patronymic=contact.patronymic,
-                        company=contact.company,
-                        work_phone=contact.work_phone,
-                        phone=contact.personal_phone))
+            with db:
+                contacts = Contact.select().order_by(Contact.name).paginate(num_page, 10)
+                if contacts:
+                    for id_contact, contact in enumerate(contacts, start=1):
+                        print("{id})  Имя: {name}\n\tФамилия: {sec_name}\n\t"
+                              "Отчество: {patronymic}\n\tОрганизация: "
+                              "{company}\n\tРаб.тел.: {work_phone}\n\tЛичный телефон: {phone}".format(
+                            id=id_contact,
+                            name=contact.name,
+                            sec_name=contact.sec_name,
+                            patronymic=contact.patronymic,
+                            company=contact.company,
+                            work_phone=contact.work_phone,
+                            phone=contact.personal_phone))
+                else:
+                    print('На этой странице нет контактов.')
         except peewee.OperationalError as error:
             logger.error(f'interface.output_all_contacts - Ошибка: {error}')
             print('В таблице нет контактов')
@@ -95,28 +84,30 @@ def output_all_contacts() -> None:
         print('Сначала добавьте контакт')
 
 
-
 @logger.catch
-def output_contacts_by_page_number() -> None:
-    logger.info('interface.output_contacts_by_page_number')
-
-
-@logger.catch
-def find_contact() -> None:
-    name = input('Введите имя контакта: ')
-    try:
-        found_contact = models.Contact.select().where(peewee.fn.Lower(models.Contact.name) == name) #если здесь добавить .lower - то вообще ничего не находит. А так находит  только если так же имя указать как в бд
-        if found_contact:
-            for contact in found_contact:
-                print(contact.name, contact.personal_phone)
-        else:
-            print('Контакт не найден')
-    except Exception as error:
-        logger.error(f'interface.find_contact - Ошибка: {error}')
-        print('Произошла ошибка при поиске контакта')
-
-
-
+def search_contact(query: str) -> None:
+    """
+    Ищет в БД контакты по переданным характеристикам
+    :param: query: str - запрос/информацию о искомом контакте
+    :return: None
+    """
+    contacts = Contact.select().where(
+        (Contact.name.contains(query)) |
+        Contact.personal_phone.contains(query))
+    if contacts:
+        for i, contact in enumerate(contacts, start=1):
+            print("{i})  Имя: {name}\n\tФамилия: {sec_name}\n\t"
+                  "Отчество: {patronymic}\n\tОрганизация: "
+                  "{company}\n\tРаб.тел.: {work_phone}\n\tЛичный телефон: {phone}".format(
+                i=i,
+                name=contact.name,
+                sec_name=contact.sec_name,
+                patronymic=contact.patronymic,
+                company=contact.company,
+                work_phone=contact.work_phone,
+                phone=contact.personal_phone))
+    else:
+        print('По заданным характеристикам, контактов не найдено')
 
 
 @logger.catch
@@ -134,17 +125,20 @@ def add_contact() -> None:
     second_name = input('Введите фамилию: ')
     patronymic = input('Введите отчество: ')
     company = input('Название организации: ')
-    while True:
-        work_phone = input('Введите рабочий телефон начинающийся на "8": ')
-        if is_valid('add_contact', work_phone):
+    work_phone = input('Рабочий телефон: ')
+    while work_phone:
+        if is_valid(work_phone):
             break
+        print('Номер телефона может содержать только цифры и знак "+" в начале')
+        work_phone = input('Рабочий телефон: ')
     while True:
-        personal_phone = input('*Введите личный телефон начинающийся на "8": ')
-        if is_valid('add_contact', personal_phone):
+        personal_phone = input('*Введите личный телефон: ')
+        if is_valid(personal_phone):
             break
-    with models.db:
-        models.db.create_tables([models.Contact])
-        contact_db = models.Contact.create(
+        print('Номер телефона может содержать только цифры и знак "+" в начале')
+    with db:
+        db.create_tables([Contact])
+        contact_db = Contact.create(
             name=name,
             sec_name=second_name,
             patronymic=patronymic,
@@ -152,37 +146,57 @@ def add_contact() -> None:
             work_phone=work_phone,
             personal_phone=personal_phone
         )
-    print('Контакт добавлен!')
-
-@logger.catch
-def editing() -> None:
-    pass
+    print(f'Контакт {name} добавлен!')
 
 
 @logger.catch
-def delete_contact() -> None:
-    pass
+def edit_contact(name: str) -> None:
+    """
+    Ищет контакт в БД. Если находит - то запрашивает у пользователя новые данные.
+    :param name: str - имя контакта, который должен быть в БД
+    :return: None
+    """
+    contact = Contact.get_or_none(Contact.name == name)
+    if contact:
+        print('Если не хотите перезаписывать данные - то жмите Enter')
+        contact.name = input(f'Имя [{contact.name}]: ') or contact.name
+        contact.sec_name = input(f'Фамилия [{contact.sec_name}]: ') or contact.sec_name
+        contact.patronymic = input(f'Отчество [{contact.patronymic}]: ') or contact.patronymic
+        contact.company = input(f'Организация [{contact.company}]: ') or contact.company
+        while True:
+            contact.work_phone = input(f'Раб.тел. [{contact.work_phone}]: ') or contact.work_phone
+            if is_valid(contact.work_phone):
+                break
+            print('Номер телефона может содержать только цифры и знак "+" в начале')
+        while True:
+            contact.personal_phone = input(f'Личный телефон [{contact.personal_phone}]: ') or contact.personal_phone
+            if is_valid(contact.personal_phone):
+                break
+            print('Номер телефона может содержать только цифры и знак "+" в начале')
+        contact.save()
+        print(f'Контакт {contact.name} изменён!')
+    else:
+        print('Контакт не найден!')
 
 
 @logger.catch
 def main() -> None:
     """Главная функция которая запускает приложение"""
     logger.info("interface.main")
-    is_work = True
-    while is_work:
+    while True:
         num_action = greetings()
         if num_action == '1':
-            output_all_contacts()
+            number_page = int(input('Введите номер страницы: '))
+            output_all_contacts(number_page)
         elif num_action == '2':
-            pass
-        elif num_action == '3':
-            find_contact()
-        elif num_action == '4':
             add_contact()
-        elif num_action == '5':
-            pass
-        elif num_action == '6':
-            pass
-        elif num_action == '7':
-            is_work = False
+        elif num_action == '3':
+            name = input('Введите имя контакта, который хотите изменить: ')
+            edit_contact(name)
+        elif num_action == '4':
+            characteristics = input('Введите характеристику(и) для контакта: ')
+            search_contact(characteristics)
+        else:
+            print('Нет такого действия.')
         input('Нажмите ввод для продолжения\n')
+        clear()
